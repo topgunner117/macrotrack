@@ -530,14 +530,16 @@ function recomputeAdd(){
 function commitAdd(){
   const q=+$('#as_qty').value||0;
   if(q<=0){ alert('Enter a quantity greater than 0.'); return; }
+  const nn=v=>Math.max(0,+v||0); // clamp negatives to 0
   const entry={
     id:uid(), name:$('#as_name').value.trim()||'Food',
     qty:q, unit:$('#addSheet').dataset.unit, source:$('#addSheet').dataset.source,
-    calories:(+$('#as_cal').value||0)*q, protein:(+$('#as_pro').value||0)*q,
-    carbs:(+$('#as_carb').value||0)*q, fat:(+$('#as_fat').value||0)*q
+    calories:nn($('#as_cal').value)*q, protein:nn($('#as_pro').value)*q,
+    carbs:nn($('#as_carb').value)*q, fat:nn($('#as_fat').value)*q
   };
   (logs[viewDate]=logs[viewDate]||[]).push(entry);
   saveLogs(); markChanged(false);
+  if(entry.source==='photo'){ mealShots=[]; if($('#mealShots')) renderShots(); const mn=$('#mealName'); if(mn) mn.value=''; }
   $('#addSheet').classList.remove('open');
   switchTab('today'); renderToday();
 }
@@ -752,7 +754,6 @@ async function estimateMeal(){
     openAdd({ title:'Estimated meal', name:(name||r.meal_name||'Meal'),
       unit:r.serving||'serving', qtyLabel:'Servings',
       base:{calories:r.calories,protein:r.protein_g,carbs:r.carbs_g,fat:r.fat_g}, qty:1, source:'photo' });
-    mealShots=[]; renderShots(); $('#mealName').value='';
   }catch(err){ st.className='status err'; st.textContent=err.message; }
   finally{ $('#estimateBtn').disabled = mealShots.length===0; }
 }
