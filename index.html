@@ -95,7 +95,17 @@
   .drop{border:1px dashed var(--line);border-radius:16px;padding:26px 16px;text-align:center;background:var(--card);margin-bottom:12px}
   .drop .ic{font-size:34px}
   .drop p{margin:8px 0 0;color:var(--muted);font-size:13px}
-  #scanPreview{width:100%;border-radius:12px;margin:10px 0;display:none}
+  #scanPreview{width:100%;border-radius:14px;margin:10px 0;display:none;box-shadow:var(--shadow)}
+  .scanner{position:relative;width:100%;aspect-ratio:3/4;max-height:58vh;background:#0b0d12;border-radius:18px;overflow:hidden;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center}
+  .scanner video{width:100%;height:100%;object-fit:cover;display:block;background:#0b0d12}
+  .scan-frame{position:absolute;inset:14% 9%;border:2px solid rgba(255,255,255,.92);border-radius:14px;box-shadow:0 0 0 100vmax rgba(0,0,0,.30);pointer-events:none}
+  .scan-hint{position:absolute;left:0;right:0;bottom:14px;text-align:center;color:#fff;font-size:12.5px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,.7);padding:0 16px;pointer-events:none}
+  .scan-placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#c7ccd6;font-size:13px;text-align:center;padding:24px}
+  .scan-placeholder .ic{font-size:40px}
+  .scan-controls{display:grid;grid-template-columns:2fr 1fr;gap:10px;margin:12px 0 4px}
+  .scan-controls .btn{margin:0}
+  .scan-controls .btn:disabled{opacity:.5}
+  label.btn{display:flex;align-items:center;justify-content:center;text-align:center}
   .status{font-size:13px;color:var(--muted);text-align:center;padding:8px}
   .status.err{color:var(--danger)}
 
@@ -235,14 +245,23 @@
   <!-- SCAN -->
   <section id="tab-scan">
     <div class="section-title">Scan a nutrition label</div>
-    <label class="drop" for="scanInput">
-      <div class="ic">📷</div>
-      <p>Tap to take a photo or choose a nutrition-facts label</p>
-    </label>
-    <input id="scanInput" type="file" accept="image/*" capture="environment" class="hidden" />
-    <img id="scanPreview" alt="preview" />
+    <div class="scanner" id="scanner">
+      <video id="camVideo" playsinline muted></video>
+      <div class="scan-frame"></div>
+      <div class="scan-hint" id="camHint">Starting camera…</div>
+      <div class="scan-placeholder hidden" id="camPlaceholder">
+        <div class="ic">📷</div>
+        <div id="camPlaceholderText">Camera preview will appear here</div>
+      </div>
+    </div>
     <div id="scanStatus" class="status"></div>
-    <div class="hint">Uses Gemini Flash-Lite. Add your free API key in Settings first. You can fix any numbers before saving.</div>
+    <div class="scan-controls">
+      <button class="btn" id="captureBtn" type="button" disabled>📸 Scan label</button>
+      <label class="btn sec" for="scanInput">Upload</label>
+    </div>
+    <input id="scanInput" type="file" accept="image/*" class="hidden" />
+    <img id="scanPreview" alt="Captured label" />
+    <div class="hint">Live scan uses Gemini Flash-Lite — add your free API key in Settings first. You can fix any numbers before saving. No camera? Use Upload.</div>
   </section>
 
   <!-- SEARCH -->
@@ -550,6 +569,7 @@ function switchTab(name){
   $$('section').forEach(s=>s.classList.toggle('active',s.id==='tab-'+name));
   if(name==='history') renderHistory();
   if(name==='settings') fillSettings();
+  if(name==='scan') startCamera(); else stopCamera();
   window.scrollTo(0,0);
 }
 function fillSettings(){
@@ -576,24 +596,73 @@ $('#todayList').addEventListener('click',e=>{
 
 $('#manualBtn').addEventListener('click',()=>openAdd({title:'Manual entry',qtyLabel:'Servings',source:'manual'}));
 
-// scan
-$('#scanInput').addEventListener('change',async e=>{
-  const file=e.target.files[0]; if(!file)return;
-  const st=$('#scanStatus'); st.className='status';
+// scan — live in-app camera
+let camStream=null;
+async function startCamera(){
+  const video=$('#camVideo'), hint=$('#camHint');
+  if(camStream) return;
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    return showCamError('Live camera not supported on this device. Use Upload.');
+  }
+  hint.textContent='Starting camera…'; $('#camPlaceholder').classList.add('hidden');
   try{
-    const {base64,mime,preview}=await fileToScaledBase64(file);
-    const pv=$('#scanPreview'); pv.src=preview; pv.style.display='block';
-    st.textContent='Reading label with Gemini…';
+    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+    video.srcObject=camStream; await video.play();
+    hint.textContent='Line up the Nutrition Facts label, then tap Scan';
+    $('#captureBtn').disabled=false;
+    $('#scanStatus').textContent=''; $('#scanStatus').className='status';
+  }catch(err){
+    camStream=null;
+    showCamError('Camera blocked ('+(err.name||'error')+'). Allow camera access, or use Upload.');
+  }
+}
+function showCamError(msg){
+  $('#camHint').textContent='';
+  $('#camPlaceholder').classList.remove('hidden');
+  $('#camPlaceholderText').textContent=msg;
+  $('#captureBtn').disabled=true;
+}
+function stopCamera(){
+  if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; }
+  const v=$('#camVideo'); if(v) v.srcObject=null;
+}
+function frameToBase64(video,maxDim=1100){
+  const s=Math.min(1,maxDim/Math.max(video.videoWidth,video.videoHeight));
+  const w=Math.round(video.videoWidth*s), h=Math.round(video.videoHeight*s);
+  const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+  cv.getContext('2d').drawImage(video,0,0,w,h);
+  const url=cv.toDataURL('image/jpeg',0.85);
+  return {base64:url.split(',')[1],mime:'image/jpeg',preview:url};
+}
+async function runScan(base64,mime,preview){
+  const st=$('#scanStatus');
+  if(preview){ const pv=$('#scanPreview'); pv.src=preview; pv.style.display='block'; }
+  st.className='status'; st.textContent='Reading label with Gemini…';
+  $('#captureBtn').disabled=true;
+  try{
     const r=await scanLabel(base64,mime);
     st.textContent='';
-    openAdd({
-      title:'From label', name:r.food_name||'Scanned food',
+    openAdd({ title:'From label', name:r.food_name||'Scanned food',
       unit:r.serving_size||'serving', qtyLabel:'Number of servings',
-      base:{calories:r.calories,protein:r.protein_g,carbs:r.carbs_g,fat:r.fat_g},
-      qty:1, source:'scan'
-    });
+      base:{calories:r.calories,protein:r.protein_g,carbs:r.carbs_g,fat:r.fat_g}, qty:1, source:'scan' });
   }catch(err){ st.className='status err'; st.textContent=err.message; }
+  finally{ if(camStream) $('#captureBtn').disabled=false; }
+}
+$('#captureBtn').addEventListener('click',()=>{
+  const video=$('#camVideo');
+  if(!camStream || !video.videoWidth) return;
+  const {base64,mime,preview}=frameToBase64(video);
+  runScan(base64,mime,preview);
+});
+$('#scanInput').addEventListener('change',async e=>{
+  const file=e.target.files[0]; if(!file)return;
+  try{ const {base64,mime,preview}=await fileToScaledBase64(file); await runScan(base64,mime,preview); }
+  catch(err){ $('#scanStatus').className='status err'; $('#scanStatus').textContent=err.message; }
   e.target.value='';
+});
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden) stopCamera();
+  else if($('#tab-scan').classList.contains('active')) startCamera();
 });
 
 // search
