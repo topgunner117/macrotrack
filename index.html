@@ -38,7 +38,8 @@
   .brand span{color:var(--accent)}
   .datenav{display:flex;align-items:center;gap:8px}
   .datenav button{background:var(--card);color:var(--text);width:32px;height:32px;border-radius:10px;font-size:16px}
-  .datenav .d{font-size:13px;font-weight:600;min-width:96px;text-align:center;color:var(--muted)}
+  .datenav .d{font-size:13px;font-weight:600;min-width:84px;text-align:center;color:var(--muted)}
+  .clock{font-size:13px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 
   .wrap{padding:4px 16px 16px}
   section{display:none}
@@ -168,6 +169,7 @@
     .top-brand{display:none}
     .top{background:none;position:static;padding:22px 2px 14px;justify-content:flex-end}
     .datenav button{width:38px;height:38px}
+    .clock{font-size:15px;margin-right:auto;color:var(--text)}
     .today-grid{display:grid;grid-template-columns:330px 1fr;gap:24px;align-items:start}
     #historyList{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     #searchResults{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -212,6 +214,7 @@
 
 <div class="top">
   <div class="brand top-brand">Macro<span>Track</span></div>
+  <div class="clock" id="clock"></div>
   <div class="datenav">
     <button id="prevDay" type="button" aria-label="Previous day">‹</button>
     <div class="d" id="dateLabel" role="button" tabindex="0" title="Jump to today">Today</div>
@@ -715,6 +718,13 @@ $('#wipeBtn').addEventListener('click',()=>{
     logs={}; settings=loadSettings(); viewDate=todayStr(); renderToday(); fillSettings();
   }
 });
+
+/* ---------- clock ---------- */
+function updateClock(){
+  const el=$('#clock'); if(!el) return;
+  el.textContent=new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+}
+updateClock(); setInterval(updateClock,1000);
 
 /* ---------- init ---------- */
 renderToday();
