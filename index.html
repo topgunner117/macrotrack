@@ -305,6 +305,15 @@
       Get a free Gemini key at <b>aistudio.google.com/apikey</b> and (optional) a USDA key at <b>fdc.nal.usda.gov/api-key-signup</b>.
       Everything is stored only on this device (localStorage). Since your key lives in the browser, keep this app to yourself.
     </div>
+    <div class="section-title" style="margin-top:16px">Sync across devices</div>
+    <label class="fld"><span class="lbl">Sync key — use the same key on every device</span><input id="s_sync" class="in" placeholder="e.g. cedar-ember-7391" autocomplete="off" spellcheck="false" /></label>
+    <div class="row2">
+      <button class="btn sec" id="genSyncBtn" type="button">Generate key</button>
+      <button class="btn" id="syncNowBtn" type="button">Save &amp; sync</button>
+    </div>
+    <div id="syncStatus" class="status"></div>
+    <div class="hint">Enter the <b>same sync key</b> on another device (or open <b>?sync=YOURKEY</b>) to load your log there. Your food log &amp; targets sync automatically; your API keys stay on each device. Keep the key private — anyone with it can read your log.</div>
+
     <div class="section-title" style="margin-top:16px">App</div>
     <button class="btn install-action hidden" id="installBtnSettings" style="margin-top:0">⬇ Install MacroTrack</button>
     <div class="hint">On Android/Chrome, tap Install above. On iPhone, use Share → Add to Home Screen. Works offline once installed.</div>
@@ -358,6 +367,7 @@ function loadSettings(){
   let s={}; try{ s = JSON.parse(localStorage.getItem('mt_settings'))||{}; }catch{}
   return {
     geminiKey: s.geminiKey||'', usdaKey: s.usdaKey||'DEMO_KEY', model: s.model||DEFAULTS.model,
+    syncKey: s.syncKey||'',
     targets:{ ...DEFAULTS.targets, ...(s.targets||{}) }
   };
 }
@@ -502,7 +512,7 @@ function commitAdd(){
     carbs:(+$('#as_carb').value||0)*q, fat:(+$('#as_fat').value||0)*q
   };
   (logs[viewDate]=logs[viewDate]||[]).push(entry);
-  saveLogs();
+  saveLogs(); markChanged(false);
   $('#addSheet').classList.remove('open');
   switchTab('today'); renderToday();
 }
@@ -581,6 +591,7 @@ function fillSettings(){
   $('#t_cal').value=settings.targets.calories; $('#t_pro').value=settings.targets.protein;
   $('#t_carb').value=settings.targets.carbs; $('#t_fat').value=settings.targets.fat;
   $('#s_gem').value=settings.geminiKey; $('#s_model').value=settings.model; $('#s_usda').value=settings.usdaKey;
+  $('#s_sync').value=settings.syncKey||'';
 }
 
 /* ---------- events ---------- */
@@ -596,7 +607,8 @@ $('#todayList').addEventListener('click',e=>{
   const b=e.target.closest('[data-del]'); if(!b)return;
   logs[viewDate]=(logs[viewDate]||[]).filter(x=>x.id!==b.dataset.del);
   if(!logs[viewDate].length) delete logs[viewDate];
-  saveLogs(); renderToday();
+  tombstone(b.dataset.del);
+  saveLogs(); markChanged(false); renderToday();
 });
 
 $('#manualBtn').addEventListener('click',()=>openAdd({title:'Manual entry',qtyLabel:'Servings',source:'manual'}));
@@ -711,15 +723,111 @@ $('#saveSettings').addEventListener('click',()=>{
   settings.geminiKey=$('#s_gem').value.trim();
   settings.model=$('#s_model').value.trim()||DEFAULTS.model;
   settings.usdaKey=$('#s_usda').value.trim()||'DEMO_KEY';
-  saveSettings(); renderToday();
+  const prevSync=settings.syncKey; settings.syncKey=$('#s_sync').value.trim();
+  saveSettings(); markChanged(true); renderToday();
+  if(settings.syncKey){ if(settings.syncKey!==prevSync) lastPushed=''; syncNow(); }
   const b=$('#saveSettings'); b.textContent='Saved ✓'; setTimeout(()=>b.textContent='Save',1200);
 });
+$('#genSyncBtn').addEventListener('click',()=>{ $('#s_sync').value=genSyncKey(); });
+$('#syncNowBtn').addEventListener('click',()=>connectSync($('#s_sync').value));
 $('#wipeBtn').addEventListener('click',()=>{
   if(confirm('Erase all logged food and settings on this device?')){
-    localStorage.removeItem('mt_logs'); localStorage.removeItem('mt_settings');
-    logs={}; settings=loadSettings(); viewDate=todayStr(); renderToday(); fillSettings();
+    ['mt_logs','mt_settings','mt_meta','mt_deleted'].forEach(k=>localStorage.removeItem(k));
+    lastPushed=''; logs={}; settings=loadSettings(); viewDate=todayStr(); renderToday(); fillSettings(); setSyncStatus('');
   }
 });
+
+/* ---------- sync (cross-device) ---------- */
+const SYNC_URL='/api/sync';
+function loadMeta(){ try{ return JSON.parse(localStorage.getItem('mt_meta'))||{}; }catch{ return {}; } }
+function saveMeta(m){ localStorage.setItem('mt_meta', JSON.stringify(m)); }
+function loadDeleted(){ try{ return JSON.parse(localStorage.getItem('mt_deleted'))||{}; }catch{ return {}; } }
+function saveDeleted(d){ localStorage.setItem('mt_deleted', JSON.stringify(d)); }
+let syncing=false, lastPushed='', pushTimer=null;
+
+function localState(){
+  const m=loadMeta();
+  return { v:1, updatedAt:+m.updatedAt||0, targets:settings.targets, targetsUpdatedAt:+m.targetsUpdatedAt||0, logs, deleted:loadDeleted() };
+}
+function markChanged(targetsChanged){
+  const m=loadMeta(); m.updatedAt=Date.now(); if(targetsChanged) m.targetsUpdatedAt=Date.now(); saveMeta(m);
+  if(settings.syncKey){ clearTimeout(pushTimer); pushTimer=setTimeout(pushNow,1200); }
+}
+function tombstone(id){ const d=loadDeleted(); d[id]=Date.now(); saveDeleted(d); }
+
+// Union-merge two states: never lose an added entry; deletions win via tombstones; targets are last-write-wins.
+function mergeState(a,b){
+  const cutoff=Date.now()-90*864e5;
+  const deleted={};
+  for(const src of [a.deleted||{}, b.deleted||{}]) for(const id in src){ const ts=+src[id]; if(ts>cutoff) deleted[id]=Math.max(deleted[id]||0,ts); }
+  const logsOut={};
+  const days=new Set([...Object.keys(a.logs||{}),...Object.keys(b.logs||{})]);
+  for(const day of days){
+    const byId={};
+    for(const e of ((a.logs&&a.logs[day])||[])) byId[e.id]=e;
+    for(const e of ((b.logs&&b.logs[day])||[])) byId[e.id]=e;
+    const arr=Object.values(byId).filter(e=>!(e.id in deleted));
+    if(arr.length) logsOut[day]=arr;
+  }
+  const aT=+a.targetsUpdatedAt||0, bT=+b.targetsUpdatedAt||0;
+  const targets=(bT>aT ? b.targets : a.targets) || a.targets || b.targets || DEFAULTS.targets;
+  return { v:1, updatedAt:Math.max(+a.updatedAt||0,+b.updatedAt||0), targets, targetsUpdatedAt:Math.max(aT,bT), logs:logsOut, deleted };
+}
+function applyState(s){
+  logs = s.logs||{}; saveLogs();
+  saveDeleted(s.deleted||{});
+  if(s.targets){ settings.targets={...settings.targets, ...s.targets}; saveSettings(); }
+  const m=loadMeta(); m.updatedAt=+s.updatedAt||m.updatedAt||0; m.targetsUpdatedAt=+s.targetsUpdatedAt||m.targetsUpdatedAt||0; saveMeta(m);
+  renderToday();
+  if($('#tab-history').classList.contains('active')) renderHistory();
+  if($('#tab-settings').classList.contains('active')) fillSettings();
+}
+function setSyncStatus(msg,isErr){ const el=$('#syncStatus'); if(!el) return; el.className='status'+(isErr?' err':''); el.textContent=msg; }
+
+async function pushNow(){
+  if(!settings.syncKey||syncing) return;
+  const json=JSON.stringify(localState());
+  if(json===lastPushed) return;
+  syncing=true;
+  try{
+    const r=await fetch(SYNC_URL+'?key='+encodeURIComponent(settings.syncKey),{method:'PUT',headers:{'Content-Type':'application/json'},body:json});
+    if(r.ok){ lastPushed=json; setSyncStatus('Synced ✓'); } else setSyncStatus('Sync error '+r.status,true);
+  }catch(e){ setSyncStatus('Offline — will retry',true); }
+  finally{ syncing=false; }
+}
+async function syncNow(){
+  if(!settings.syncKey||syncing) return;
+  syncing=true; setSyncStatus('Syncing…');
+  try{
+    let remote=null;
+    const r=await fetch(SYNC_URL+'?key='+encodeURIComponent(settings.syncKey),{cache:'no-store'});
+    if(r.ok) remote=await r.json();
+    else if(r.status!==404){ setSyncStatus('Sync error '+r.status,true); return; }
+    if(remote) applyState(mergeState(localState(),remote));
+    const json=JSON.stringify(localState());
+    if(json!==lastPushed){
+      const p=await fetch(SYNC_URL+'?key='+encodeURIComponent(settings.syncKey),{method:'PUT',headers:{'Content-Type':'application/json'},body:json});
+      if(p.ok){ lastPushed=json; setSyncStatus('Synced ✓'); } else setSyncStatus('Sync error '+p.status,true);
+    } else setSyncStatus('Synced ✓');
+  }catch(e){ setSyncStatus('Offline — will retry',true); }
+  finally{ syncing=false; }
+}
+function flushBeacon(){
+  if(!settings.syncKey) return;
+  try{ navigator.sendBeacon(SYNC_URL+'?key='+encodeURIComponent(settings.syncKey), new Blob([JSON.stringify(localState())],{type:'application/json'})); }catch(e){}
+}
+function genSyncKey(){
+  const w=['cedar','ember','river','maple','otter','pine','coral','flint','wren','sage','birch','fox','luna','reef','dune','moss','ash','koi','vale','clay'];
+  const r=()=>w[Math.floor(Math.random()*w.length)];
+  return r()+'-'+r()+'-'+Math.floor(1000+Math.random()*9000);
+}
+function connectSync(key){
+  settings.syncKey=(key||'').trim(); saveSettings(); fillSettings();
+  if(settings.syncKey){ lastPushed=''; syncNow(); } else setSyncStatus('Sync off');
+}
+setInterval(()=>{ if(settings.syncKey && !document.hidden) syncNow(); }, 45000);
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) flushBeacon(); else if(settings.syncKey) syncNow(); });
+window.addEventListener('pagehide', flushBeacon);
 
 /* ---------- clock ---------- */
 function updateClock(){
@@ -730,6 +838,11 @@ updateClock(); setInterval(updateClock,1000);
 
 /* ---------- init ---------- */
 renderToday();
+
+/* connect sync from ?sync=KEY link or a saved key */
+const urlSync=new URLSearchParams(location.search).get('sync');
+if(urlSync){ settings.syncKey=urlSync.trim(); saveSettings(); history.replaceState(null,'',location.pathname); }
+if(settings.syncKey) syncNow();
 
 /* ---------- PWA service worker ---------- */
 if('serviceWorker' in navigator){

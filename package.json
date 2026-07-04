@@ -1,0 +1,9 @@
+{
+  "name": "macrotrack",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Personal nutrition & macro tracker with cross-device sync",
+  "dependencies": {
+    "@vercel/blob": "^0.27.0"
+  }
+}
