@@ -535,7 +535,7 @@ function fileToScaledBase64(file,maxDim=1100){
 }
 async function scanLabel(base64,mime){
   if(!settings.geminiKey) throw new Error('Add your Gemini API key in Settings first.');
-  const url=`https://generativelanguage.googleapis.com/v1beta/models/${settings.model}:generateContent?key=${settings.geminiKey}`;
+  const url=`https://generativelanguage.googleapis.com/v1beta/models/${settings.model}:generateContent`;
   const body={
     contents:[{parts:[
       {text:"Read this Nutrition Facts label. Return the nutrition for ONE serving as printed. serving_size is the human-readable serving text (e.g. '1 cup (240 ml)'). Use grams for macros. If a value isn't shown, use 0. If this is not a nutrition label, set food_name to 'Not a label' and all numbers to 0."},
@@ -549,7 +549,7 @@ async function scanLabel(base64,mime){
       }, required:["food_name","calories","protein_g","carbs_g","fat_g"] }
     }
   };
-  const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':settings.geminiKey},body:JSON.stringify(body)});
   if(!res.ok){
     let msg=res.status+''; try{ const j=await res.json(); msg=j.error?.message||msg; }catch{}
     throw new Error('Gemini: '+msg);
