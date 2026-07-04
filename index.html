@@ -62,9 +62,11 @@
   .kleft b{color:var(--text);font-size:15px}
 
   /* Buttons row */
-  .actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
-  .actions button{background:var(--card);border:1px solid var(--line);color:var(--text);
-    padding:12px 4px;border-radius:14px;font-size:12px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:4px}
+  .actions{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-bottom:16px;
+    background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .actions button{background:transparent;border:none;color:var(--text);
+    padding:14px 4px;border-radius:0;font-size:12px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:4px}
+  .actions button + button{border-left:1px solid var(--line)}
   .actions button .ic{font-size:20px}
   .actions button:active{background:var(--card2)}
 
@@ -170,17 +172,17 @@
     .top{background:none;position:static;padding:22px 2px 14px;justify-content:flex-end}
     .datenav button{width:38px;height:38px}
     .clock{font-size:15px;margin-right:auto;color:var(--text)}
-    .today-grid{display:grid;grid-template-columns:330px 1fr;gap:24px;align-items:start}
+    .today-grid{max-width:480px;margin:0 auto}
     #historyList{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     #searchResults{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     #tab-settings,#tab-scan{max-width:600px}
     .sheet{align-items:center}
     .sheet-card{max-width:440px;border-radius:20px;border:1px solid var(--line);margin-bottom:0}
   }
-  @media(min-width:1000px){ .today-grid{grid-template-columns:360px 1fr} }
+  @media(min-width:1000px){ .today-grid{max-width:500px} }
 
   /* Light-theme soft depth */
-  .rings-card,.item,.hday,.sresult,.drop,.actions button,.btn,.searchbar button,.datenav button{box-shadow:var(--shadow)}
+  .rings-card,.item,.hday,.sresult,.drop,.actions,.btn,.searchbar button,.datenav button{box-shadow:var(--shadow)}
   .btn:active{box-shadow:none}
   .sheet-card{box-shadow:var(--shadow-lg)}
   .tabbar{box-shadow:0 -2px 18px rgba(16,24,40,.07)}
