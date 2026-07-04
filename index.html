@@ -22,7 +22,9 @@
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
-  body{padding-bottom:76px;max-width:520px;margin:0 auto;min-height:100vh}
+  body{padding-bottom:76px;min-height:100vh}
+  .app{max-width:520px;margin:0 auto}
+  .sidebar{display:none}
   h1,h2,h3{margin:0}
   button{font-family:inherit;cursor:pointer;border:none}
   input{font-family:inherit}
@@ -130,17 +132,66 @@
     display:flex;flex-direction:column;align-items:center;gap:3px}
   .tabbar button .ic{font-size:19px}
   .tabbar button.active{color:var(--accent)}
+
+  /* Sidebar (desktop) */
+  .sidebar-brand{font-size:22px;font-weight:800;letter-spacing:-.02em;padding:6px 14px 10px}
+  .sidebar-brand span{color:var(--accent)}
+  .sidenav{display:flex;flex-direction:column;gap:4px}
+  .sidenav button{display:flex;align-items:center;gap:12px;background:transparent;color:var(--muted);
+    padding:11px 14px;border-radius:12px;font-size:14px;font-weight:600;text-align:left;width:100%}
+  .sidenav button .ic{font-size:18px;width:22px;text-align:center}
+  .sidenav button:hover{background:var(--card)}
+  .sidenav button.active{background:var(--card);color:var(--accent)}
+  .install-action{margin-top:12px}
+  button:focus-visible, input:focus-visible, [role=button]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  /* Different layout on tablet / desktop */
+  @media(min-width:760px){
+    body{padding-bottom:0}
+    .app{display:flex;gap:26px;max-width:1080px;margin:0 auto;padding:0 24px;align-items:flex-start}
+    .sidebar{display:flex;flex-direction:column;width:216px;flex:0 0 216px;position:sticky;top:0;
+      height:100vh;padding:22px 0}
+    .main{flex:1;min-width:0}
+    .tabbar{display:none}
+    .top-brand{display:none}
+    .top{background:none;position:static;padding:22px 2px 14px;justify-content:flex-end}
+    .datenav button{width:38px;height:38px}
+    .today-grid{display:grid;grid-template-columns:330px 1fr;gap:24px;align-items:start}
+    #historyList{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    #searchResults{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    #tab-settings,#tab-scan{max-width:600px}
+    .sheet{align-items:center}
+    .sheet-card{max-width:440px;border-radius:20px;border:1px solid var(--line);margin-bottom:0}
+  }
+  @media(min-width:1000px){ .today-grid{grid-template-columns:360px 1fr} }
+
   .hidden{display:none!important}
 </style>
 </head>
 <body>
 
+<div class="app">
+
+<aside class="sidebar">
+  <div class="sidebar-brand">Macro<span>Track</span></div>
+  <nav class="sidenav" aria-label="Main navigation">
+    <button data-tab="today" class="active"><span class="ic">🏠</span><span>Today</span></button>
+    <button data-tab="scan"><span class="ic">📷</span><span>Scan</span></button>
+    <button data-tab="search"><span class="ic">🔍</span><span>Search</span></button>
+    <button data-tab="history"><span class="ic">📅</span><span>History</span></button>
+    <button data-tab="settings"><span class="ic">⚙️</span><span>Settings</span></button>
+  </nav>
+  <button class="btn install-action hidden" id="installBtnSide">⬇&nbsp; Install app</button>
+</aside>
+
+<div class="main">
+
 <div class="top">
-  <div class="brand">Macro<span>Track</span></div>
+  <div class="brand top-brand">Macro<span>Track</span></div>
   <div class="datenav">
-    <button id="prevDay">‹</button>
-    <div class="d" id="dateLabel">Today</div>
-    <button id="nextDay">›</button>
+    <button id="prevDay" type="button" aria-label="Previous day">‹</button>
+    <div class="d" id="dateLabel" role="button" tabindex="0" title="Jump to today">Today</div>
+    <button id="nextDay" type="button" aria-label="Next day">›</button>
   </div>
 </div>
 
@@ -148,17 +199,23 @@
 
   <!-- TODAY -->
   <section id="tab-today" class="active">
-    <div class="rings-card">
-      <div class="rings" id="rings"></div>
-      <div class="kleft" id="kleft"></div>
+    <div class="today-grid">
+      <div class="today-left">
+        <div class="rings-card">
+          <div class="rings" id="rings"></div>
+          <div class="kleft" id="kleft"></div>
+        </div>
+        <div class="actions">
+          <button data-go="scan"><span class="ic">📷</span>Scan label</button>
+          <button data-go="search"><span class="ic">🔍</span>Search food</button>
+          <button id="manualBtn"><span class="ic">✏️</span>Manual</button>
+        </div>
+      </div>
+      <div class="today-right">
+        <div class="section-title">Logged this day</div>
+        <div id="todayList"></div>
+      </div>
     </div>
-    <div class="actions">
-      <button data-go="scan"><span class="ic">📷</span>Scan label</button>
-      <button data-go="search"><span class="ic">🔍</span>Search food</button>
-      <button id="manualBtn"><span class="ic">✏️</span>Manual</button>
-    </div>
-    <div class="section-title">Logged this day</div>
-    <div id="todayList"></div>
   </section>
 
   <!-- SCAN -->
@@ -210,12 +267,17 @@
       Get a free Gemini key at <b>aistudio.google.com/apikey</b> and (optional) a USDA key at <b>fdc.nal.usda.gov/api-key-signup</b>.
       Everything is stored only on this device (localStorage). Since your key lives in the browser, keep this app to yourself.
     </div>
+    <div class="section-title" style="margin-top:16px">App</div>
+    <button class="btn install-action hidden" id="installBtnSettings" style="margin-top:0">⬇ Install MacroTrack</button>
+    <div class="hint">On Android/Chrome, tap Install above. On iPhone, use Share → Add to Home Screen. Works offline once installed.</div>
     <div class="hint" id="resetWrap" style="margin-top:16px">
       <button class="btn sec" id="wipeBtn">Erase all my data</button>
     </div>
   </section>
 
 </div>
+</div><!-- /main -->
+</div><!-- /app -->
 
 <!-- Add / edit bottom sheet -->
 <div class="sheet" id="addSheet">
@@ -340,7 +402,7 @@ function renderToday(){
         <div class="item-sub">${r1(e.qty)} × ${esc(e.unit)} · ${e.source}</div>
       </div>
       <div class="item-macros">${r0(e.calories)} kcal<br>P${r1(e.protein)} C${r1(e.carbs)} F${r1(e.fat)}</div>
-      <button class="del" data-del="${e.id}">×</button>
+      <button class="del" data-del="${e.id}" type="button" aria-label="Remove ${esc(e.name)}">×</button>
     </div>`).join('')
     : `<div class="empty">Nothing logged yet.<br>Scan a label or search a food to start.</div>`;
 }
@@ -469,7 +531,8 @@ function extractMacros(ns){
 
 /* ---------- tabs / nav ---------- */
 function switchTab(name){
-  $$('#tabbar button').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
+  $$('[data-tab]').forEach(b=>{const on=b.dataset.tab===name;b.classList.toggle('active',on);
+    if(on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');});
   $$('section').forEach(s=>s.classList.toggle('active',s.id==='tab-'+name));
   if(name==='history') renderHistory();
   if(name==='settings') fillSettings();
@@ -482,11 +545,13 @@ function fillSettings(){
 }
 
 /* ---------- events ---------- */
-$('#tabbar').addEventListener('click',e=>{const b=e.target.closest('button');if(b)switchTab(b.dataset.tab)});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)switchTab(b.dataset.tab)});
 $$('.actions [data-go]').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.go)));
 $('#prevDay').addEventListener('click',()=>{viewDate=shiftDate(viewDate,-1);renderToday()});
 $('#nextDay').addEventListener('click',()=>{viewDate=shiftDate(viewDate,1);renderToday()});
-$('#dateLabel').addEventListener('click',()=>{viewDate=todayStr();renderToday()});
+const jumpToday=()=>{viewDate=todayStr();renderToday()};
+$('#dateLabel').addEventListener('click',jumpToday);
+$('#dateLabel').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();jumpToday();}});
 
 $('#todayList').addEventListener('click',e=>{
   const b=e.target.closest('[data-del]'); if(!b)return;
@@ -575,6 +640,24 @@ renderToday();
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
+
+/* ---------- PWA install (Android/Chrome) ---------- */
+let deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault(); deferredPrompt=e;
+  $$('.install-action').forEach(b=>b.classList.remove('hidden'));
+});
+$$('.install-action').forEach(b=>b.addEventListener('click',async()=>{
+  if(!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt=null;
+  $$('.install-action').forEach(x=>x.classList.add('hidden'));
+}));
+window.addEventListener('appinstalled',()=>{
+  deferredPrompt=null;
+  $$('.install-action').forEach(b=>b.classList.add('hidden'));
+});
 </script>
 </body>
 </html>
