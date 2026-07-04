@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#0f1115" />
+<title>MacroTrack</title>
+<style>
+  :root{
+    --bg:#0f1115; --bg2:#151823; --card:#1a1e2b; --card2:#212636;
+    --line:#2a3145; --text:#e8ebf2; --muted:#8b93a7; --muted2:#5f6880;
+    --cal:#f97316; --pro:#22c55e; --carb:#eab308; --fat:#818cf8;
+    --accent:#22c55e; --danger:#ef4444; --radius:16px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+  body{padding-bottom:76px;max-width:520px;margin:0 auto;min-height:100vh}
+  h1,h2,h3{margin:0}
+  button{font-family:inherit;cursor:pointer;border:none}
+  input{font-family:inherit}
+
+  /* Header */
+  .top{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,var(--bg) 70%,transparent);
+    padding:14px 16px 8px;display:flex;align-items:center;justify-content:space-between}
+  .brand{font-size:18px;font-weight:800;letter-spacing:-.02em}
+  .brand span{color:var(--accent)}
+  .datenav{display:flex;align-items:center;gap:8px}
+  .datenav button{background:var(--card);color:var(--text);width:32px;height:32px;border-radius:10px;font-size:16px}
+  .datenav .d{font-size:13px;font-weight:600;min-width:96px;text-align:center;color:var(--muted)}
+
+  .wrap{padding:4px 16px 16px}
+  section{display:none}
+  section.active{display:block;animation:fade .18s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  /* Rings */
+  .rings-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px 14px 14px;margin-bottom:14px}
+  .rings{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .ring{position:relative;text-align:center}
+  .ring svg{width:100%;max-width:78px;transform:rotate(-90deg)}
+  .ring-bg{fill:none;stroke:var(--card2);stroke-width:7}
+  .ring-fg{fill:none;stroke-width:7;stroke-linecap:round;transition:stroke-dashoffset .5s ease}
+  .ring-center{position:absolute;top:0;left:0;right:0;height:78px;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+  @media(min-width:420px){.ring-center{height:auto;top:6px}}
+  .ring-val{font-size:16px;font-weight:800;line-height:1}
+  .ring-tgt{font-size:10px;color:var(--muted2)}
+  .ring-label{font-size:11px;color:var(--muted);margin-top:6px;font-weight:600}
+  .kleft{text-align:center;margin-top:14px;font-size:13px;color:var(--muted)}
+  .kleft b{color:var(--text);font-size:15px}
+
+  /* Buttons row */
+  .actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+  .actions button{background:var(--card);border:1px solid var(--line);color:var(--text);
+    padding:12px 4px;border-radius:14px;font-size:12px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:4px}
+  .actions button .ic{font-size:20px}
+  .actions button:active{background:var(--card2)}
+
+  /* Lists */
+  .section-title{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted2);margin:8px 2px 8px;font-weight:700}
+  .item{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);
+    border-radius:14px;padding:12px;margin-bottom:8px}
+  .item-name{font-weight:600;font-size:14px}
+  .item-sub{font-size:11px;color:var(--muted2);margin-top:2px}
+  .item-macros{font-size:11px;color:var(--muted);margin-left:auto;text-align:right;white-space:nowrap}
+  .del{background:transparent;color:var(--muted2);font-size:20px;width:26px;height:26px;border-radius:8px;flex:0 0 auto}
+  .del:active{background:var(--card2);color:var(--danger)}
+  .empty{text-align:center;color:var(--muted2);font-size:13px;padding:28px 12px;border:1px dashed var(--line);border-radius:14px}
+
+  /* Inputs */
+  label.fld{display:block;margin:10px 0}
+  label.fld .lbl{font-size:12px;color:var(--muted);margin-bottom:5px;display:block;font-weight:600}
+  input.in{width:100%;background:var(--bg2);border:1px solid var(--line);color:var(--text);
+    padding:12px;border-radius:12px;font-size:15px;outline:none}
+  input.in:focus{border-color:var(--accent)}
+  .btn{width:100%;background:var(--accent);color:#06210f;font-weight:800;padding:13px;border-radius:12px;font-size:15px}
+  .btn:active{opacity:.85}
+  .btn.sec{background:var(--card2);color:var(--text)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .row4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .hint{font-size:11px;color:var(--muted2);margin-top:6px;line-height:1.4}
+
+  /* Scan */
+  .drop{border:1px dashed var(--line);border-radius:16px;padding:26px 16px;text-align:center;background:var(--card);margin-bottom:12px}
+  .drop .ic{font-size:34px}
+  .drop p{margin:8px 0 0;color:var(--muted);font-size:13px}
+  #scanPreview{width:100%;border-radius:12px;margin:10px 0;display:none}
+  .status{font-size:13px;color:var(--muted);text-align:center;padding:8px}
+  .status.err{color:var(--danger)}
+
+  /* Search */
+  .searchbar{display:flex;gap:8px;margin-bottom:12px}
+  .searchbar input{flex:1}
+  .searchbar button{background:var(--accent);color:#06210f;font-weight:800;padding:0 16px;border-radius:12px}
+  .sresult{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:8px}
+  .sresult:active{background:var(--card2)}
+
+  /* History */
+  .hday{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px}
+  .hday-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .hday-date{font-weight:700;font-size:14px}
+  .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px}
+  .badge.ok{background:rgba(34,197,94,.15);color:var(--pro)}
+  .badge.no{background:rgba(148,163,184,.14);color:var(--muted)}
+  .mbar{margin-bottom:7px}
+  .mbar-top{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:3px}
+  .mbar-track{height:6px;background:var(--card2);border-radius:6px;overflow:hidden}
+  .mbar-fill{height:100%;border-radius:6px}
+
+  /* Bottom sheet */
+  .sheet{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.55);display:none;align-items:flex-end;justify-content:center}
+  .sheet.open{display:flex;animation:fade .15s ease}
+  .sheet-card{background:var(--bg2);border:1px solid var(--line);border-bottom:none;width:100%;max-width:520px;
+    border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));max-height:88vh;overflow:auto}
+  .sheet-h{font-size:15px;font-weight:800;margin-bottom:4px}
+  .addtotal{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:12px 0;font-size:13px;text-align:center;color:var(--muted)}
+  .addtotal b{color:var(--text)}
+
+  /* Tab bar */
+  .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:30;background:var(--bg2);border-top:1px solid var(--line);
+    display:flex;max-width:520px;margin:0 auto;padding-bottom:env(safe-area-inset-bottom)}
+  .tabbar button{flex:1;background:transparent;color:var(--muted2);padding:9px 0 8px;font-size:10px;font-weight:600;
+    display:flex;flex-direction:column;align-items:center;gap:3px}
+  .tabbar button .ic{font-size:19px}
+  .tabbar button.active{color:var(--accent)}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand">Macro<span>Track</span></div>
+  <div class="datenav">
+    <button id="prevDay">‹</button>
+    <div class="d" id="dateLabel">Today</div>
+    <button id="nextDay">›</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- TODAY -->
+  <section id="tab-today" class="active">
+    <div class="rings-card">
+      <div class="rings" id="rings"></div>
+      <div class="kleft" id="kleft"></div>
+    </div>
+    <div class="actions">
+      <button data-go="scan"><span class="ic">📷</span>Scan label</button>
+      <button data-go="search"><span class="ic">🔍</span>Search food</button>
+      <button id="manualBtn"><span class="ic">✏️</span>Manual</button>
+    </div>
+    <div class="section-title">Logged this day</div>
+    <div id="todayList"></div>
+  </section>
+
+  <!-- SCAN -->
+  <section id="tab-scan">
+    <div class="section-title">Scan a nutrition label</div>
+    <label class="drop" for="scanInput">
+      <div class="ic">📷</div>
+      <p>Tap to take a photo or choose a nutrition-facts label</p>
+    </label>
+    <input id="scanInput" type="file" accept="image/*" capture="environment" class="hidden" />
+    <img id="scanPreview" alt="preview" />
+    <div id="scanStatus" class="status"></div>
+    <div class="hint">Uses Gemini Flash-Lite. Add your free API key in Settings first. You can fix any numbers before saving.</div>
+  </section>
+
+  <!-- SEARCH -->
+  <section id="tab-search">
+    <div class="section-title">Search foods without a label</div>
+    <div class="searchbar">
+      <input id="searchInput" class="in" placeholder="e.g. chicken breast, banana, rice" />
+      <button id="searchBtn">Go</button>
+    </div>
+    <div id="searchStatus" class="status"></div>
+    <div id="searchResults"></div>
+    <div class="hint">Free USDA FoodData Central database — whole foods, per 100 g. Tap a result to log it.</div>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="tab-history">
+    <div class="section-title">Past days</div>
+    <div id="historyList"></div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="tab-settings">
+    <div class="section-title">Daily targets</div>
+    <div class="row4">
+      <label class="fld"><span class="lbl">Calories</span><input id="t_cal" class="in" type="number" inputmode="numeric"/></label>
+      <label class="fld"><span class="lbl">Protein g</span><input id="t_pro" class="in" type="number" inputmode="numeric"/></label>
+      <label class="fld"><span class="lbl">Carbs g</span><input id="t_carb" class="in" type="number" inputmode="numeric"/></label>
+      <label class="fld"><span class="lbl">Fat g</span><input id="t_fat" class="in" type="number" inputmode="numeric"/></label>
+    </div>
+    <div class="section-title" style="margin-top:16px">API keys</div>
+    <label class="fld"><span class="lbl">Gemini API key (for label scanning)</span><input id="s_gem" class="in" placeholder="AIza..." /></label>
+    <label class="fld"><span class="lbl">Gemini model</span><input id="s_model" class="in" placeholder="gemini-2.5-flash-lite" /></label>
+    <label class="fld"><span class="lbl">USDA API key (optional — DEMO_KEY works)</span><input id="s_usda" class="in" placeholder="DEMO_KEY" /></label>
+    <button class="btn" id="saveSettings" style="margin-top:8px">Save</button>
+    <div class="hint" style="margin-top:12px">
+      Get a free Gemini key at <b>aistudio.google.com/apikey</b> and (optional) a USDA key at <b>fdc.nal.usda.gov/api-key-signup</b>.
+      Everything is stored only on this device (localStorage). Since your key lives in the browser, keep this app to yourself.
+    </div>
+    <div class="hint" id="resetWrap" style="margin-top:16px">
+      <button class="btn sec" id="wipeBtn">Erase all my data</button>
+    </div>
+  </section>
+
+</div>
+
+<!-- Add / edit bottom sheet -->
+<div class="sheet" id="addSheet">
+  <div class="sheet-card">
+    <div class="sheet-h" id="as_title">Add food</div>
+    <label class="fld"><span class="lbl">Name</span><input id="as_name" class="in" /></label>
+    <div class="lbl" id="as_unit" style="font-size:12px;color:var(--muted)">per serving</div>
+    <div class="row4">
+      <label class="fld"><span class="lbl">Cal</span><input id="as_cal" class="in" type="number" inputmode="decimal"/></label>
+      <label class="fld"><span class="lbl">P g</span><input id="as_pro" class="in" type="number" inputmode="decimal"/></label>
+      <label class="fld"><span class="lbl">C g</span><input id="as_carb" class="in" type="number" inputmode="decimal"/></label>
+      <label class="fld"><span class="lbl">F g</span><input id="as_fat" class="in" type="number" inputmode="decimal"/></label>
+    </div>
+    <label class="fld"><span class="lbl" id="as_qtylbl">Quantity (servings)</span><input id="as_qty" class="in" type="number" inputmode="decimal" step="0.25" value="1"/></label>
+    <div class="addtotal" id="as_total"></div>
+    <div class="row2">
+      <button class="btn sec" id="as_cancel">Cancel</button>
+      <button class="btn" id="as_add">Add to log</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tab bar -->
+<div class="tabbar" id="tabbar">
+  <button data-tab="today" class="active"><span class="ic">🏠</span>Today</button>
+  <button data-tab="scan"><span class="ic">📷</span>Scan</button>
+  <button data-tab="search"><span class="ic">🔍</span>Search</button>
+  <button data-tab="history"><span class="ic">📅</span>History</button>
+  <button data-tab="settings"><span class="ic">⚙️</span>Settings</button>
+</div>
+
+<script>
+const $ = (s,el=document)=>el.querySelector(s);
+const $$ = (s,el=document)=>[...el.querySelectorAll(s)];
+
+/* ---------- state ---------- */
+const DEFAULTS = { targets:{calories:1800,protein:130,carbs:195,fat:55}, geminiKey:'', usdaKey:'DEMO_KEY', model:'gemini-2.5-flash-lite' };
+
+function loadSettings(){
+  let s={}; try{ s = JSON.parse(localStorage.getItem('mt_settings'))||{}; }catch{}
+  return {
+    geminiKey: s.geminiKey||'', usdaKey: s.usdaKey||'DEMO_KEY', model: s.model||DEFAULTS.model,
+    targets:{ ...DEFAULTS.targets, ...(s.targets||{}) }
+  };
+}
+function saveSettings(){ localStorage.setItem('mt_settings', JSON.stringify(settings)); }
+function loadLogs(){ try{ return JSON.parse(localStorage.getItem('mt_logs'))||{}; }catch{ return {}; } }
+function saveLogs(){ localStorage.setItem('mt_logs', JSON.stringify(logs)); }
+
+let settings = loadSettings();
+let logs = loadLogs();
+let viewDate = todayStr();
+let lastResults = [];
+
+/* ---------- helpers ---------- */
+function todayStr(d=new Date()){
+  const t = new Date(d.getTime() - d.getTimezoneOffset()*60000);
+  return t.toISOString().slice(0,10);
+}
+function shiftDate(str,days){
+  const [y,m,d]=str.split('-').map(Number);
+  const dt=new Date(y,m-1,d); dt.setDate(dt.getDate()+days);
+  return todayStr(dt);
+}
+function prettyDate(str){
+  if(str===todayStr()) return 'Today';
+  if(str===shiftDate(todayStr(),-1)) return 'Yesterday';
+  const [y,m,d]=str.split('-').map(Number);
+  return new Date(y,m-1,d).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+}
+const uid=()=>Math.random().toString(36).slice(2,9);
+const r0=n=>Math.round(+n||0);
+const r1=n=>Math.round((+n||0)*10)/10;
+
+function dayTotals(d){
+  return (logs[d]||[]).reduce((t,e)=>({
+    calories:t.calories+(+e.calories||0), protein:t.protein+(+e.protein||0),
+    carbs:t.carbs+(+e.carbs||0), fat:t.fat+(+e.fat||0)
+  }),{calories:0,protein:0,carbs:0,fat:0});
+}
+function goalMet(d){
+  const t=dayTotals(d), g=settings.targets;
+  if(t.calories===0) return false;
+  return t.calories <= g.calories+50 && t.protein >= g.protein*0.9;
+}
+
+/* ---------- rendering ---------- */
+function ringSVG(value,target,color){
+  const r=34, C=2*Math.PI*r, pct=target>0?Math.min(value/target,1):0, off=C*(1-pct);
+  return `<svg viewBox="0 0 80 80">
+    <circle class="ring-bg" cx="40" cy="40" r="${r}"></circle>
+    <circle class="ring-fg" cx="40" cy="40" r="${r}" style="stroke:${color};stroke-dasharray:${C.toFixed(1)};stroke-dashoffset:${off.toFixed(1)}"></circle>
+  </svg>`;
+}
+function renderRings(){
+  const t=dayTotals(viewDate), g=settings.targets;
+  const macros=[
+    ['Calories',t.calories,g.calories,'var(--cal)'],
+    ['Protein',t.protein,g.protein,'var(--pro)'],
+    ['Carbs',t.carbs,g.carbs,'var(--carb)'],
+    ['Fat',t.fat,g.fat,'var(--fat)']
+  ];
+  $('#rings').innerHTML = macros.map(([lbl,v,tg,c])=>`
+    <div class="ring">
+      ${ringSVG(v,tg,c)}
+      <div class="ring-center"><div class="ring-val">${r0(v)}</div><div class="ring-tgt">/${r0(tg)}</div></div>
+      <div class="ring-label">${lbl}${v>tg?' ⚠️':''}</div>
+    </div>`).join('');
+  const left=g.calories-t.calories;
+  $('#kleft').innerHTML = left>=0
+    ? `<b>${r0(left)}</b> kcal left · <b>${Math.max(0,r0(g.protein-t.protein))} g</b> protein to go`
+    : `<b>${r0(-left)}</b> kcal over target`;
+}
+function renderToday(){
+  $('#dateLabel').textContent = prettyDate(viewDate);
+  renderRings();
+  const items = logs[viewDate]||[];
+  $('#todayList').innerHTML = items.length ? items.map(e=>`
+    <div class="item">
+      <div>
+        <div class="item-name">${esc(e.name)}</div>
+        <div class="item-sub">${r1(e.qty)} × ${esc(e.unit)} · ${e.source}</div>
+      </div>
+      <div class="item-macros">${r0(e.calories)} kcal<br>P${r1(e.protein)} C${r1(e.carbs)} F${r1(e.fat)}</div>
+      <button class="del" data-del="${e.id}">×</button>
+    </div>`).join('')
+    : `<div class="empty">Nothing logged yet.<br>Scan a label or search a food to start.</div>`;
+}
+function renderHistory(){
+  const days = Object.keys(logs).sort().reverse();
+  const g=settings.targets;
+  $('#historyList').innerHTML = days.length ? days.map(d=>{
+    const t=dayTotals(d), met=goalMet(d);
+    const bar=(v,tg,c)=>{
+      const pct=tg>0?Math.min(v/tg*100,100):0;
+      return `<div class="mbar">
+        <div class="mbar-top"><span>${labelOf(c)}</span><span>${r0(v)} / ${r0(tg)}</span></div>
+        <div class="mbar-track"><div class="mbar-fill" style="width:${pct}%;background:${c}"></div></div>
+      </div>`;
+    };
+    return `<div class="hday">
+      <div class="hday-head">
+        <div class="hday-date">${prettyDate(d)}</div>
+        <div class="badge ${met?'ok':'no'}">${met?'✓ On track':'Off target'}</div>
+      </div>
+      ${bar(t.calories,g.calories,'var(--cal)')}
+      ${bar(t.protein,g.protein,'var(--pro)')}
+      ${bar(t.carbs,g.carbs,'var(--carb)')}
+      ${bar(t.fat,g.fat,'var(--fat)')}
+    </div>`;
+  }).join('') : `<div class="empty">No history yet. Log some food and it'll show up here.</div>`;
+}
+function labelOf(c){return {'var(--cal)':'Calories','var(--pro)':'Protein','var(--carb)':'Carbs','var(--fat)':'Fat'}[c]||''}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+/* ---------- add sheet ---------- */
+function openAdd({title='Add food',name='',unit='serving',qtyLabel='Quantity (servings)',base={calories:0,protein:0,carbs:0,fat:0},qty=1,source='manual'}){
+  $('#as_title').textContent=title;
+  $('#as_name').value=name;
+  $('#as_unit').textContent='Values per '+unit;
+  $('#as_qtylbl').textContent=qtyLabel;
+  $('#as_cal').value=r0(base.calories);
+  $('#as_pro').value=r1(base.protein);
+  $('#as_carb').value=r1(base.carbs);
+  $('#as_fat').value=r1(base.fat);
+  $('#as_qty').value=qty;
+  $('#addSheet').dataset.source=source;
+  $('#addSheet').dataset.unit=unit;
+  recomputeAdd();
+  $('#addSheet').classList.add('open');
+}
+function recomputeAdd(){
+  const q=+$('#as_qty').value||0;
+  const cal=(+$('#as_cal').value||0)*q, p=(+$('#as_pro').value||0)*q, c=(+$('#as_carb').value||0)*q, f=(+$('#as_fat').value||0)*q;
+  $('#as_total').innerHTML=`Adds <b>${r0(cal)}</b> kcal · <b>${r1(p)}g</b> P · <b>${r1(c)}g</b> C · <b>${r1(f)}g</b> F`;
+}
+function commitAdd(){
+  const q=+$('#as_qty').value||0;
+  if(q<=0){ alert('Enter a quantity greater than 0.'); return; }
+  const entry={
+    id:uid(), name:$('#as_name').value.trim()||'Food',
+    qty:q, unit:$('#addSheet').dataset.unit, source:$('#addSheet').dataset.source,
+    calories:(+$('#as_cal').value||0)*q, protein:(+$('#as_pro').value||0)*q,
+    carbs:(+$('#as_carb').value||0)*q, fat:(+$('#as_fat').value||0)*q
+  };
+  (logs[viewDate]=logs[viewDate]||[]).push(entry);
+  saveLogs();
+  $('#addSheet').classList.remove('open');
+  switchTab('today'); renderToday();
+}
+
+/* ---------- Gemini label scan ---------- */
+function fileToScaledBase64(file,maxDim=1100){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader(), img=new Image();
+    reader.onload=()=>{img.src=reader.result}; reader.onerror=reject;
+    img.onload=()=>{
+      let{width,height}=img; const s=Math.min(1,maxDim/Math.max(width,height));
+      width=Math.round(width*s); height=Math.round(height*s);
+      const cv=document.createElement('canvas'); cv.width=width; cv.height=height;
+      cv.getContext('2d').drawImage(img,0,0,width,height);
+      const url=cv.toDataURL('image/jpeg',0.85);
+      resolve({base64:url.split(',')[1],mime:'image/jpeg',preview:url});
+    };
+    img.onerror=reject; reader.readAsDataURL(file);
+  });
+}
+async function scanLabel(base64,mime){
+  if(!settings.geminiKey) throw new Error('Add your Gemini API key in Settings first.');
+  const url=`https://generativelanguage.googleapis.com/v1beta/models/${settings.model}:generateContent?key=${settings.geminiKey}`;
+  const body={
+    contents:[{parts:[
+      {text:"Read this Nutrition Facts label. Return the nutrition for ONE serving as printed. serving_size is the human-readable serving text (e.g. '1 cup (240 ml)'). Use grams for macros. If a value isn't shown, use 0. If this is not a nutrition label, set food_name to 'Not a label' and all numbers to 0."},
+      {inline_data:{mime_type:mime,data:base64}}
+    ]}],
+    generationConfig:{
+      responseMimeType:"application/json",
+      responseSchema:{ type:"OBJECT", properties:{
+        food_name:{type:"STRING"}, serving_size:{type:"STRING"},
+        calories:{type:"NUMBER"}, protein_g:{type:"NUMBER"}, carbs_g:{type:"NUMBER"}, fat_g:{type:"NUMBER"}
+      }, required:["food_name","calories","protein_g","carbs_g","fat_g"] }
+    }
+  };
+  const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!res.ok){
+    let msg=res.status+''; try{ const j=await res.json(); msg=j.error?.message||msg; }catch{}
+    throw new Error('Gemini: '+msg);
+  }
+  const data=await res.json();
+  const txt=data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if(!txt) throw new Error('Empty response from Gemini.');
+  return JSON.parse(txt);
+}
+
+/* ---------- USDA search ---------- */
+async function searchFoods(query){
+  const key=settings.usdaKey||'DEMO_KEY';
+  const url=`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(key)}&query=${encodeURIComponent(query)}&pageSize=25&dataType=${encodeURIComponent('Foundation,SR Legacy')}`;
+  const res=await fetch(url);
+  if(!res.ok) throw new Error('USDA error '+res.status+(res.status===429?' (rate limit — add your own key in Settings)':''));
+  const data=await res.json();
+  return (data.foods||[]).map(f=>({name:f.description,per100g:extractMacros(f.foodNutrients||[])}));
+}
+function extractMacros(ns){
+  const val=nums=>{ for(const n of nums){ const m=ns.find(x=>String(x.nutrientNumber)===n); if(m&&m.value!=null) return +m.value; } return 0; };
+  const protein=val(['203']), carbs=val(['205']), fat=val(['204']);
+  let calories=val(['208','957','958']);
+  if(!calories) calories=protein*4+carbs*4+fat*9;
+  return {calories,protein,carbs,fat};
+}
+
+/* ---------- tabs / nav ---------- */
+function switchTab(name){
+  $$('#tabbar button').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
+  $$('section').forEach(s=>s.classList.toggle('active',s.id==='tab-'+name));
+  if(name==='history') renderHistory();
+  if(name==='settings') fillSettings();
+  window.scrollTo(0,0);
+}
+function fillSettings(){
+  $('#t_cal').value=settings.targets.calories; $('#t_pro').value=settings.targets.protein;
+  $('#t_carb').value=settings.targets.carbs; $('#t_fat').value=settings.targets.fat;
+  $('#s_gem').value=settings.geminiKey; $('#s_model').value=settings.model; $('#s_usda').value=settings.usdaKey;
+}
+
+/* ---------- events ---------- */
+$('#tabbar').addEventListener('click',e=>{const b=e.target.closest('button');if(b)switchTab(b.dataset.tab)});
+$$('.actions [data-go]').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.go)));
+$('#prevDay').addEventListener('click',()=>{viewDate=shiftDate(viewDate,-1);renderToday()});
+$('#nextDay').addEventListener('click',()=>{viewDate=shiftDate(viewDate,1);renderToday()});
+$('#dateLabel').addEventListener('click',()=>{viewDate=todayStr();renderToday()});
+
+$('#todayList').addEventListener('click',e=>{
+  const b=e.target.closest('[data-del]'); if(!b)return;
+  logs[viewDate]=(logs[viewDate]||[]).filter(x=>x.id!==b.dataset.del);
+  if(!logs[viewDate].length) delete logs[viewDate];
+  saveLogs(); renderToday();
+});
+
+$('#manualBtn').addEventListener('click',()=>openAdd({title:'Manual entry',qtyLabel:'Servings',source:'manual'}));
+
+// scan
+$('#scanInput').addEventListener('change',async e=>{
+  const file=e.target.files[0]; if(!file)return;
+  const st=$('#scanStatus'); st.className='status';
+  try{
+    const {base64,mime,preview}=await fileToScaledBase64(file);
+    const pv=$('#scanPreview'); pv.src=preview; pv.style.display='block';
+    st.textContent='Reading label with Gemini…';
+    const r=await scanLabel(base64,mime);
+    st.textContent='';
+    openAdd({
+      title:'From label', name:r.food_name||'Scanned food',
+      unit:r.serving_size||'serving', qtyLabel:'Number of servings',
+      base:{calories:r.calories,protein:r.protein_g,carbs:r.carbs_g,fat:r.fat_g},
+      qty:1, source:'scan'
+    });
+  }catch(err){ st.className='status err'; st.textContent=err.message; }
+  e.target.value='';
+});
+
+// search
+async function doSearch(){
+  const q=$('#searchInput').value.trim(); if(!q)return;
+  const st=$('#searchStatus'); st.className='status'; st.textContent='Searching…';
+  $('#searchResults').innerHTML='';
+  try{
+    lastResults=await searchFoods(q);
+    st.textContent=lastResults.length?'':'No results — try a simpler term.';
+    $('#searchResults').innerHTML=lastResults.map((f,i)=>`
+      <div class="sresult" data-i="${i}">
+        <div class="item-name">${esc(f.name)}</div>
+        <div class="item-sub">per 100 g · ${r0(f.per100g.calories)} kcal · P${r1(f.per100g.protein)} C${r1(f.per100g.carbs)} F${r1(f.per100g.fat)}</div>
+      </div>`).join('');
+  }catch(err){ st.className='status err'; st.textContent=err.message; }
+}
+$('#searchBtn').addEventListener('click',doSearch);
+$('#searchInput').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch()});
+$('#searchResults').addEventListener('click',e=>{
+  const el=e.target.closest('[data-i]'); if(!el)return;
+  const f=lastResults[+el.dataset.i]; const p=f.per100g;
+  openAdd({
+    title:'From search', name:f.name, unit:'100 g', qtyLabel:'Portions of 100 g (1.5 = 150 g)',
+    base:{calories:p.calories,protein:p.protein,carbs:p.carbs,fat:p.fat}, qty:1, source:'search'
+  });
+});
+
+// add sheet
+['as_qty','as_cal','as_pro','as_carb','as_fat'].forEach(id=>$('#'+id).addEventListener('input',recomputeAdd));
+$('#as_add').addEventListener('click',commitAdd);
+$('#as_cancel').addEventListener('click',()=>$('#addSheet').classList.remove('open'));
+$('#addSheet').addEventListener('click',e=>{if(e.target.id==='addSheet')$('#addSheet').classList.remove('open')});
+
+// settings
+$('#saveSettings').addEventListener('click',()=>{
+  settings.targets={
+    calories:+$('#t_cal').value||0, protein:+$('#t_pro').value||0,
+    carbs:+$('#t_carb').value||0, fat:+$('#t_fat').value||0
+  };
+  settings.geminiKey=$('#s_gem').value.trim();
+  settings.model=$('#s_model').value.trim()||DEFAULTS.model;
+  settings.usdaKey=$('#s_usda').value.trim()||'DEMO_KEY';
+  saveSettings(); renderToday();
+  const b=$('#saveSettings'); b.textContent='Saved ✓'; setTimeout(()=>b.textContent='Save',1200);
+});
+$('#wipeBtn').addEventListener('click',()=>{
+  if(confirm('Erase all logged food and settings on this device?')){
+    localStorage.removeItem('mt_logs'); localStorage.removeItem('mt_settings');
+    logs={}; settings=loadSettings(); viewDate=todayStr(); renderToday(); fillSettings();
+  }
+});
+
+/* ---------- init ---------- */
+renderToday();
+</script>
+</body>
+</html>
