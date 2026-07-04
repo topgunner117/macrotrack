@@ -109,6 +109,16 @@
   .scan-controls .btn{margin:0}
   .scan-controls .btn:disabled{opacity:.5}
   label.btn{display:flex;align-items:center;justify-content:center;text-align:center}
+  #scanMode{grid-template-columns:1fr 1fr;margin-bottom:12px}
+  #scanMode button.active{background:var(--card2);color:var(--accent)}
+  .shots{display:flex;gap:8px;margin:12px 0 4px}
+  .shot{position:relative;width:78px;height:78px;border-radius:12px;overflow:hidden;border:1px solid var(--line);flex:0 0 auto}
+  .shot img{width:100%;height:100%;object-fit:cover;display:block}
+  .shot button{position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:50%;background:rgba(20,27,45,.72);color:#fff;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center}
+  .shot-empty{width:78px;height:78px;border-radius:12px;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;color:var(--muted2);font-size:11px;text-align:center;padding:6px;flex:0 0 auto}
+  .mealname-row{display:flex;gap:8px;margin:10px 0}
+  .mealname-row input{flex:1}
+  .mealname-row .btn{width:auto;padding:0 14px;flex:0 0 auto;font-size:18px}
   .status{font-size:13px;color:var(--muted);text-align:center;padding:8px}
   .status.err{color:var(--danger)}
 
@@ -249,7 +259,11 @@
 
   <!-- SCAN -->
   <section id="tab-scan">
-    <div class="section-title">Scan a nutrition label</div>
+    <div class="section-title">Scan</div>
+    <div class="actions" id="scanMode">
+      <button data-mode="label" class="active" type="button"><span class="ic">🏷️</span>Label</button>
+      <button data-mode="meal" type="button"><span class="ic">🍽️</span>Meal</button>
+    </div>
     <div class="scanner" id="scanner">
       <video id="camVideo" playsinline muted></video>
       <div class="scan-frame"></div>
@@ -265,8 +279,19 @@
       <label class="btn sec" for="scanInput">Upload</label>
     </div>
     <input id="scanInput" type="file" accept="image/*" class="hidden" />
+
+    <!-- Meal mode -->
+    <div id="mealPanel" class="hidden">
+      <div class="shots" id="mealShots"></div>
+      <div class="mealname-row">
+        <input id="mealName" class="in" placeholder="What is it? e.g. chicken burrito bowl" autocomplete="off" />
+        <button id="micBtn" class="btn sec" type="button" title="Say the meal name" aria-label="Say the meal name">🎤</button>
+      </div>
+      <button class="btn" id="estimateBtn" type="button" disabled>✨ Estimate &amp; add</button>
+    </div>
+
     <img id="scanPreview" alt="Captured label" />
-    <div class="hint">Live scan uses Gemini Flash-Lite — add your free API key in Settings first. You can fix any numbers before saving. No camera? Use Upload.</div>
+    <div class="hint" id="scanHint">Line up the Nutrition Facts label and tap Scan. Add your free Gemini key in Settings first; you can fix any numbers before saving.</div>
   </section>
 
   <!-- SEARCH -->
@@ -614,7 +639,7 @@ $('#todayList').addEventListener('click',e=>{
 $('#manualBtn').addEventListener('click',()=>openAdd({title:'Manual entry',qtyLabel:'Servings',source:'manual'}));
 
 // scan — live in-app camera
-let camStream=null;
+let camStream=null, scanMode='label', mealShots=[];
 async function startCamera(){
   const video=$('#camVideo'), hint=$('#camHint');
   if(camStream) return;
@@ -668,15 +693,86 @@ async function runScan(base64,mime,preview){
 $('#captureBtn').addEventListener('click',()=>{
   const video=$('#camVideo');
   if(!camStream || !video.videoWidth) return;
-  const {base64,mime,preview}=frameToBase64(video);
-  runScan(base64,mime,preview);
+  const shot=frameToBase64(video);
+  if(scanMode==='meal') addMealShot(shot);
+  else runScan(shot.base64,shot.mime,shot.preview);
 });
 $('#scanInput').addEventListener('change',async e=>{
   const file=e.target.files[0]; if(!file)return;
-  try{ const {base64,mime,preview}=await fileToScaledBase64(file); await runScan(base64,mime,preview); }
-  catch(err){ $('#scanStatus').className='status err'; $('#scanStatus').textContent=err.message; }
+  try{
+    const shot=await fileToScaledBase64(file);
+    if(scanMode==='meal') addMealShot(shot);
+    else await runScan(shot.base64,shot.mime,shot.preview);
+  }catch(err){ $('#scanStatus').className='status err'; $('#scanStatus').textContent=err.message; }
   e.target.value='';
 });
+
+/* ----- meal photo estimator ----- */
+function setScanMode(mode){
+  scanMode=mode;
+  $$('#scanMode button').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
+  $('#mealPanel').classList.toggle('hidden', mode!=='meal');
+  $('#captureBtn').textContent = mode==='meal' ? '📸 Add photo' : '📸 Scan label';
+  $('#scanHint').textContent = mode==='meal'
+    ? 'Snap 1–2 photos of the dish, say or type what it is, then Estimate. Numbers are an AI estimate — tweak before saving.'
+    : 'Line up the Nutrition Facts label and tap Scan. Add your free Gemini key in Settings first; you can fix any numbers before saving.';
+  $('#scanStatus').textContent=''; $('#scanStatus').className='status';
+  if(mode==='meal') renderShots();
+}
+function addMealShot(shot){
+  if(mealShots.length>=2){ const st=$('#scanStatus'); st.className='status'; st.textContent='Max 2 photos — remove one to add another.'; return; }
+  mealShots.push(shot); renderShots();
+}
+function renderShots(){
+  const el=$('#mealShots'); if(!el) return;
+  el.innerHTML = mealShots.map((s,i)=>`<div class="shot"><img src="${s.preview}" alt="meal photo"><button data-shot="${i}" type="button" aria-label="Remove photo">×</button></div>`).join('')
+    + (mealShots.length<2 ? `<div class="shot-empty">${mealShots.length?'Add 1 more<br>(optional)':'Snap or upload<br>a photo'}</div>` : '');
+  $('#estimateBtn').disabled = mealShots.length===0;
+}
+async function estimateMeal(){
+  if(!mealShots.length) return;
+  if(!settings.geminiKey){ const st=$('#scanStatus'); st.className='status err'; st.textContent='Add your Gemini API key in Settings first.'; return; }
+  const name=$('#mealName').value.trim();
+  const st=$('#scanStatus'); st.className='status'; st.textContent='Estimating with Gemini…';
+  $('#estimateBtn').disabled=true;
+  try{
+    const parts=[{text:`You are a nutrition estimator. The user photographed a meal${name?` and says it is: "${name}"`:''}. Estimate the nutrition for the ENTIRE portion visible across the photo(s), using the plate, utensils, or hands for scale. Return whole-serving totals in grams (NOT per 100 g). serving = a short size description (e.g. "1 bowl, ~450 g"). items = what you see. confidence = low/medium/high. If unsure, give your best reasonable estimate.`}];
+    for(const s of mealShots) parts.push({inline_data:{mime_type:s.mime,data:s.base64}});
+    const body={ contents:[{parts}], generationConfig:{ responseMimeType:'application/json', responseSchema:{ type:'OBJECT', properties:{
+      meal_name:{type:'STRING'}, items:{type:'STRING'}, serving:{type:'STRING'},
+      calories:{type:'NUMBER'}, protein_g:{type:'NUMBER'}, carbs_g:{type:'NUMBER'}, fat_g:{type:'NUMBER'}, confidence:{type:'STRING'}
+    }, required:['meal_name','calories','protein_g','carbs_g','fat_g'] } } };
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${settings.model}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':settings.geminiKey},body:JSON.stringify(body)});
+    if(!res.ok){ let m=res.status+''; try{ const j=await res.json(); m=j.error?.message||m; }catch{} throw new Error('Gemini: '+m); }
+    const data=await res.json();
+    const txt=data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if(!txt) throw new Error('Empty response from Gemini.');
+    const r=JSON.parse(txt);
+    st.textContent = r.confidence ? ('Estimate confidence: '+r.confidence) : '';
+    openAdd({ title:'Estimated meal', name:(name||r.meal_name||'Meal'),
+      unit:r.serving||'serving', qtyLabel:'Servings',
+      base:{calories:r.calories,protein:r.protein_g,carbs:r.carbs_g,fat:r.fat_g}, qty:1, source:'photo' });
+    mealShots=[]; renderShots(); $('#mealName').value='';
+  }catch(err){ st.className='status err'; st.textContent=err.message; }
+  finally{ $('#estimateBtn').disabled = mealShots.length===0; }
+}
+$('#scanMode').addEventListener('click',e=>{ const b=e.target.closest('[data-mode]'); if(b) setScanMode(b.dataset.mode); });
+$('#mealShots').addEventListener('click',e=>{ const b=e.target.closest('[data-shot]'); if(!b)return; mealShots.splice(+b.dataset.shot,1); renderShots(); });
+$('#estimateBtn').addEventListener('click',estimateMeal);
+(function setupMic(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition, mic=$('#micBtn');
+  if(!SR){ mic.style.display='none'; return; }
+  mic.addEventListener('click',()=>{
+    try{
+      const rec=new SR(); rec.lang=navigator.language||'en-US'; rec.interimResults=false; rec.maxAlternatives=1;
+      mic.textContent='🔴';
+      rec.onresult=ev=>{ $('#mealName').value=ev.results[0][0].transcript; };
+      rec.onend=()=>{ mic.textContent='🎤'; };
+      rec.onerror=()=>{ mic.textContent='🎤'; };
+      rec.start();
+    }catch(e){ mic.textContent='🎤'; }
+  });
+})();
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden) stopCamera();
   else if($('#tab-scan').classList.contains('active')) startCamera();

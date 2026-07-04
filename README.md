@@ -5,6 +5,7 @@ A simple personal food + macro tracker. One self-contained `index.html` — no b
 ## Features
 - **Daily rings** for Calories / Protein / Carbs / Fat vs your targets (defaults: **1800 kcal · 130g P · 195g C · 55g F**).
 - **Scan a nutrition label** with a photo → Gemini Flash-Lite reads it into structured numbers (you can fix any before saving).
+- **Estimate a meal from photos** — Scan → **Meal** mode: snap 1–2 photos of a dish, say (🎤) or type what it is, and Gemini estimates the whole portion's calories + macros (editable before saving).
 - **Search foods without a label** (chicken, rice, banana…) via the free USDA FoodData Central database (per 100 g).
 - **Manual entry** for anything.
 - **History** — every past day with an "On track / Off target" badge (on track = calories at/under target **and** protein at/over target).
