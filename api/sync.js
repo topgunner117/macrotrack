@@ -15,7 +15,7 @@ function resolveAlias(key) {
     const i = pair.indexOf(':');
     if (i < 0) continue;
     const alias = pair.slice(0, i).trim(), phrase = pair.slice(i + 1).trim();
-    if (alias && phrase && alias === key) return phrase;
+    if (alias && phrase && alias.toLowerCase() === key.toLowerCase()) return phrase;
   }
   return key;
 }
