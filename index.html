@@ -202,6 +202,8 @@
   .sresult{transition:background .15s ease}
   .sresult:hover{background:var(--card2)}
   .item{transition:box-shadow .15s ease}
+  .item[data-edit]{cursor:pointer}
+  .item[data-edit]:hover{border-color:var(--accent)}
 
   .hidden{display:none!important}
 </style>
@@ -469,7 +471,7 @@ function renderToday(){
   renderRings();
   const items = logs[viewDate]||[];
   $('#todayList').innerHTML = items.length ? items.map(e=>`
-    <div class="item">
+    <div class="item" data-edit="${e.id}" role="button" tabindex="0" title="Tap to edit">
       <div>
         <div class="item-name">${esc(e.name)}</div>
         <div class="item-sub">${r1(e.qty)} × ${esc(e.unit)} · ${e.source}</div>
@@ -478,6 +480,17 @@ function renderToday(){
       <button class="del" data-del="${e.id}" type="button" aria-label="Remove ${esc(e.name)}">×</button>
     </div>`).join('')
     : `<div class="empty">Nothing logged yet.<br>Scan a label or search a food to start.</div>`;
+}
+function editEntry(id){
+  const entry=(logs[viewDate]||[]).find(e=>e.id===id);
+  if(!entry) return;
+  const q=entry.qty||1;
+  openAdd({
+    title:'Edit food', editId:id, name:entry.name, unit:entry.unit,
+    qtyLabel: entry.unit==='100 g' ? 'Portions of 100 g (1.5 = 150 g)' : 'Servings',
+    base:{ calories:entry.calories/q, protein:entry.protein/q, carbs:entry.carbs/q, fat:entry.fat/q },
+    qty:q, source:entry.source
+  });
 }
 function renderHistory(){
   const days = Object.keys(logs).sort().reverse();
@@ -507,7 +520,7 @@ function labelOf(c){return {'var(--cal)':'Calories','var(--pro)':'Protein','var(
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 
 /* ---------- add sheet ---------- */
-function openAdd({title='Add food',name='',unit='serving',qtyLabel='Quantity (servings)',base={calories:0,protein:0,carbs:0,fat:0},qty=1,source='manual'}){
+function openAdd({title='Add food',editId='',name='',unit='serving',qtyLabel='Quantity (servings)',base={calories:0,protein:0,carbs:0,fat:0},qty=1,source='manual'}){
   $('#as_title').textContent=title;
   $('#as_name').value=name;
   $('#as_unit').textContent='Values per '+unit;
@@ -519,27 +532,36 @@ function openAdd({title='Add food',name='',unit='serving',qtyLabel='Quantity (se
   $('#as_qty').value=qty;
   $('#addSheet').dataset.source=source;
   $('#addSheet').dataset.unit=unit;
+  $('#addSheet').dataset.editId=editId||'';
+  $('#as_add').textContent = editId ? 'Save changes' : 'Add to log';
   recomputeAdd();
   $('#addSheet').classList.add('open');
 }
 function recomputeAdd(){
   const q=+$('#as_qty').value||0;
   const cal=(+$('#as_cal').value||0)*q, p=(+$('#as_pro').value||0)*q, c=(+$('#as_carb').value||0)*q, f=(+$('#as_fat').value||0)*q;
-  $('#as_total').innerHTML=`Adds <b>${r0(cal)}</b> kcal · <b>${r1(p)}g</b> P · <b>${r1(c)}g</b> C · <b>${r1(f)}g</b> F`;
+  const verb=$('#addSheet').dataset.editId ? 'Now' : 'Adds';
+  $('#as_total').innerHTML=`${verb} <b>${r0(cal)}</b> kcal · <b>${r1(p)}g</b> P · <b>${r1(c)}g</b> C · <b>${r1(f)}g</b> F`;
 }
 function commitAdd(){
   const q=+$('#as_qty').value||0;
   if(q<=0){ alert('Enter a quantity greater than 0.'); return; }
   const nn=v=>Math.max(0,+v||0); // clamp negatives to 0
-  const entry={
-    id:uid(), name:$('#as_name').value.trim()||'Food',
+  const editId=$('#addSheet').dataset.editId;
+  const data={
+    name:$('#as_name').value.trim()||'Food',
     qty:q, unit:$('#addSheet').dataset.unit, source:$('#addSheet').dataset.source,
     calories:nn($('#as_cal').value)*q, protein:nn($('#as_pro').value)*q,
     carbs:nn($('#as_carb').value)*q, fat:nn($('#as_fat').value)*q
   };
-  (logs[viewDate]=logs[viewDate]||[]).push(entry);
+  if(editId){
+    const arr=logs[viewDate]||[]; const idx=arr.findIndex(e=>e.id===editId);
+    if(idx>=0) arr[idx]={...arr[idx], ...data};
+  } else {
+    (logs[viewDate]=logs[viewDate]||[]).push({id:uid(), ...data});
+  }
   saveLogs(); markChanged(false);
-  if(entry.source==='photo'){ mealShots=[]; if($('#mealShots')) renderShots(); const mn=$('#mealName'); if(mn) mn.value=''; }
+  if(!editId && data.source==='photo'){ mealShots=[]; if($('#mealShots')) renderShots(); const mn=$('#mealName'); if(mn) mn.value=''; }
   $('#addSheet').classList.remove('open');
   switchTab('today'); renderToday();
 }
@@ -631,11 +653,21 @@ $('#dateLabel').addEventListener('click',jumpToday);
 $('#dateLabel').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();jumpToday();}});
 
 $('#todayList').addEventListener('click',e=>{
-  const b=e.target.closest('[data-del]'); if(!b)return;
-  logs[viewDate]=(logs[viewDate]||[]).filter(x=>x.id!==b.dataset.del);
-  if(!logs[viewDate].length) delete logs[viewDate];
-  tombstone(b.dataset.del);
-  saveLogs(); markChanged(false); renderToday();
+  const del=e.target.closest('[data-del]');
+  if(del){
+    logs[viewDate]=(logs[viewDate]||[]).filter(x=>x.id!==del.dataset.del);
+    if(!logs[viewDate].length) delete logs[viewDate];
+    tombstone(del.dataset.del);
+    saveLogs(); markChanged(false); renderToday();
+    return;
+  }
+  const item=e.target.closest('[data-edit]');
+  if(item) editEntry(item.dataset.edit);
+});
+$('#todayList').addEventListener('keydown',e=>{
+  if(e.key!=='Enter' && e.key!==' ') return;
+  const item=e.target.closest('[data-edit]'); if(!item) return;
+  e.preventDefault(); editEntry(item.dataset.edit);
 });
 
 $('#manualBtn').addEventListener('click',()=>openAdd({title:'Manual entry',qtyLabel:'Servings',source:'manual'}));
