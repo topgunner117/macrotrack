@@ -141,6 +141,13 @@
   .coach-input{display:flex;gap:8px}
   .coach-input input{flex:1}
   .coach-input .btn{width:auto;padding:0 18px;flex:0 0 auto}
+  .suggests{display:flex;flex-direction:column;gap:6px;align-self:flex-start;max-width:94%;margin-top:-4px;animation:mealIn .2s ease}
+  .sug{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px;box-shadow:var(--shadow)}
+  .sug-info{display:flex;flex-direction:column;min-width:0}
+  .sug-name{font-weight:600;font-size:13px}
+  .sug-macros{font-size:11px;color:var(--muted2)}
+  .sug-add{margin-left:auto;flex:0 0 auto;background:var(--accent);color:#fff;font-weight:700;font-size:12px;border-radius:20px;padding:7px 13px;cursor:pointer}
+  .sug-add:active{opacity:.85}
   .status{font-size:13px;color:var(--muted);text-align:center;padding:8px}
   .status.err{color:var(--danger)}
 
@@ -876,8 +883,15 @@ $('#searchResults').addEventListener('click',e=>{
 });
 
 /* ----- AI coach ----- */
-let chat=[], coachReady=false;
-const COACH_SYSTEM=`You are a warm, encouraging nutrition coach for a 15-year-old whose goal is body recomposition — losing a little fat while building muscle. Keep advice SAFE and age-appropriate: prioritise hitting protein, eating ENOUGH (never crash-dieting or very low calories), whole foods, and simple realistic choices for a teen. Be concise and practical: suggest specific foods with rough macro amounts, and when asked what to eat to hit remaining macros, use the "Remaining today" numbers. Prefer high-protein, nutrient-dense options. Use short bullet points and a friendly tone. Do NOT give medical advice; if asked about supplements, weight-loss drugs, or extreme diets, gently suggest checking with a parent or doctor. Encourage, never shame.`;
+let chat=[], coachReady=false, sugStore={}, sugSeq=0;
+const COACH_SCHEMA={ type:'OBJECT', properties:{
+  reply:{type:'STRING'},
+  suggestions:{ type:'ARRAY', items:{ type:'OBJECT', properties:{
+    name:{type:'STRING'}, serving:{type:'STRING'},
+    calories:{type:'NUMBER'}, protein_g:{type:'NUMBER'}, carbs_g:{type:'NUMBER'}, fat_g:{type:'NUMBER'}
+  }, required:['name','calories','protein_g','carbs_g','fat_g'] } }
+}, required:['reply'] };
+const COACH_SYSTEM=`You are a warm, encouraging nutrition coach for a 15-year-old whose goal is body recomposition — losing a little fat while building muscle. Keep advice SAFE and age-appropriate: prioritise hitting protein, eating ENOUGH (never crash-dieting or very low calories), whole foods, and simple realistic choices for a teen. Be concise and practical: suggest specific foods with rough macro amounts, and when asked what to eat to hit remaining macros, use the "Remaining today" numbers. Prefer high-protein, nutrient-dense options. Use short bullet points and a friendly tone. Do NOT give medical advice; if asked about supplements, weight-loss drugs, or extreme diets, gently suggest checking with a parent or doctor. Encourage, never shame. Put your short friendly answer in the "reply" field (you may use - bullets and **bold**). In "suggestions", include the specific foods you recommend with a realistic serving and typical macros (0–5 items, only what you truly recommend — leave empty if the question isn't asking for food ideas).`;
 const COACH_CHIPS=[
   'What should I eat to hit my remaining protein?',
   'I need a few more carbs — quick ideas?',
@@ -919,18 +933,39 @@ async function askCoach(question){
     const body={
       system_instruction:{parts:[{text:COACH_SYSTEM+'\n\nCurrent context:\n'+coachContext()}]},
       contents: chat.map(m=>({role:m.role,parts:[{text:m.text}]})),
-      generationConfig:{ temperature:0.6 }
+      generationConfig:{ temperature:0.6, responseMimeType:'application/json', responseSchema:COACH_SCHEMA }
     };
     const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${settings.model}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':settings.geminiKey},body:JSON.stringify(body)});
     if(!res.ok){ let m=res.status+''; try{ const j=await res.json(); m=j.error?.message||m; }catch{} throw new Error('Gemini: '+m); }
     const data=await res.json();
-    const txt=data.candidates?.[0]?.content?.parts?.[0]?.text || "Hmm, I couldn't come up with anything — try rephrasing?";
-    typing.remove(); addCoachMsg('bot',txt);
-    chat.push({role:'model',text:txt});
+    const txt=data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    let parsed; try{ parsed=JSON.parse(txt); }catch{ parsed={reply:txt||"Hmm, try rephrasing?",suggestions:[]}; }
+    typing.remove();
+    addCoachMsg('bot', parsed.reply || 'Here are some ideas:');
+    renderSuggestions(parsed.suggestions);
+    chat.push({role:'model',text:parsed.reply||''});
     if(chat.length>12) chat=chat.slice(-12);
   }catch(err){ typing.remove(); addCoachMsg('bot','⚠️ '+err.message); }
   finally{ $('#coachSend').disabled=false; }
 }
+function renderSuggestions(list){
+  if(!Array.isArray(list) || !list.length) return;
+  const wrap=document.createElement('div'); wrap.className='suggests';
+  wrap.innerHTML=list.map(s=>{
+    const key='s'+(sugSeq++); sugStore[key]=s;
+    return `<div class="sug">
+      <div class="sug-info"><span class="sug-name">${esc(s.name||'Food')}</span><span class="sug-macros">${esc(s.serving||'1 serving')} · ${r0(s.calories)} kcal · ${r1(s.protein_g)}P ${r1(s.carbs_g)}C ${r1(s.fat_g)}F</span></div>
+      <button class="sug-add" type="button" data-sug="${key}">+ Log</button>
+    </div>`;
+  }).join('');
+  $('#coachLog').appendChild(wrap); wrap.scrollIntoView({block:'nearest'});
+}
+$('#coachLog').addEventListener('click',e=>{
+  const b=e.target.closest('[data-sug]'); if(!b) return;
+  const s=sugStore[b.dataset.sug]; if(!s) return;
+  openAdd({ title:'Log suggestion', name:s.name||'Food', unit:s.serving||'serving', qtyLabel:'Servings',
+    base:{calories:+s.calories||0,protein:+s.protein_g||0,carbs:+s.carbs_g||0,fat:+s.fat_g||0}, qty:1, source:'coach' });
+});
 $('#coachSend').addEventListener('click',()=>{ const v=$('#coachInput').value; $('#coachInput').value=''; askCoach(v); });
 $('#coachInput').addEventListener('keydown',e=>{ if(e.key==='Enter'){ const v=$('#coachInput').value; $('#coachInput').value=''; askCoach(v); } });
 $('#coachChips').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(c) askCoach(c.textContent); });
